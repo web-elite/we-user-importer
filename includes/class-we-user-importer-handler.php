@@ -27,9 +27,10 @@ function update_user_wc_address($user_id, $state, $city): bool
  *
  * @param  mixed $user_id
  * @param  mixed $add_balance
+ * @param  mixed $expire_expire_timestampdate
  * @return bool
  */
-function add_wallet_balance($user_id, $add_balance): bool
+function add_wallet_balance($user_id, $add_balance, $expire_timestamp = null): bool
 {
     global $wpdb;
 
@@ -52,7 +53,7 @@ function add_wallet_balance($user_id, $add_balance): bool
         "user_id"      => $user_id,
         "order_id"     => 0,
         "amount"       => $add_balance,
-        "expire_time"  => null,
+        "expire_time"  => $expire_timestamp ?? null,
         "start_time"   => null,
         "status_start" => null,
     ]);
@@ -62,6 +63,109 @@ function add_wallet_balance($user_id, $add_balance): bool
     $sms->sendPatternSMS($add_balance, $user->username, 228529);
 
     return true;
+}
+
+/**
+ * Convert days to expiration or Jalali date to Unix timestamp
+ *
+ * @param mixed $input Integer days or Jalali date string (format: YYYY/MM/DD)
+ * @return int Unix timestamp
+ */
+function convert_to_timestamp($input) {
+    if (is_int($input)) {
+        // Input is number of days - calculate future timestamp
+        return time() + ($input * 24 * 60 * 60);
+    } elseif (is_string($input) && preg_match('/^\d{4}\/\d{2}\/\d{2}$/', $input)) {
+        // Input is Jalali date - convert to Gregorian then to timestamp
+        return jalali_to_timestamp($input);
+    }
+    
+    // Invalid input - return current timestamp as fallback
+    return time();
+}
+
+/**
+ * Convert Jalali (Shamsi) date to Unix timestamp
+ * Uses algorithm for conversion without external dependencies
+ *
+ * @param string $jalali_date Date in format YYYY/MM/DD
+ * @return int Unix timestamp
+ */
+function jalali_to_timestamp($jalali_date) {
+    // Split Jalali date into components
+    list($j_year, $j_month, $j_day) = explode('/', $jalali_date);
+    
+    // Convert Jalali to Gregorian
+    $g_date = jalali_to_gregorian($j_year, $j_month, $j_day);
+    
+    // Create DateTime object from Gregorian date
+    $datetime = DateTime::createFromFormat('Y-m-d', sprintf('%d-%d-%d', $g_date[0], $g_date[1], $g_date[2]));
+    
+    // Return Unix timestamp
+    return $datetime->getTimestamp();
+}
+
+/**
+ * Convert Jalali (Solar Hijri) date to Gregorian date
+ * Based on algorithm from https://jdf.scr.ir/
+ * 
+ * @param int $j_y Jalali year
+ * @param int $j_m Jalali month
+ * @param int $j_d Jalali day
+ * @return array Gregorian date as [year, month, day]
+ */
+function jalali_to_gregorian($j_y, $j_m, $j_d) {
+    $g_days_in_month = array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+    $j_days_in_month = array(31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29);
+    
+    $jy = $j_y - 979;
+    $jm = $j_m - 1;
+    $jd = $j_d - 1;
+    
+    $j_day_no = 365 * $jy + floor($jy / 33) * 8 + floor(($jy % 33 + 3) / 4);
+    
+    for ($i = 0; $i < $jm; ++$i) {
+        $j_day_no += $j_days_in_month[$i];
+    }
+    
+    $j_day_no += $jd;
+    
+    $g_day_no = $j_day_no + 79;
+    
+    $gy = 1600 + 400 * floor($g_day_no / 146097);
+    $g_day_no = $g_day_no % 146097;
+    
+    $leap = true;
+    if ($g_day_no >= 36525) {
+        $g_day_no--;
+        $gy += 100 * floor($g_day_no / 36524);
+        $g_day_no = $g_day_no % 36524;
+        
+        if ($g_day_no >= 365) {
+            $g_day_no++;
+        } else {
+            $leap = false;
+        }
+    }
+    
+    $gy += 4 * floor($g_day_no / 1461);
+    $g_day_no %= 1461;
+    
+    if ($g_day_no >= 366) {
+        $leap = false;
+        $g_day_no--;
+        $gy += floor($g_day_no / 365);
+        $g_day_no = $g_day_no % 365;
+    }
+    
+    for ($i = 0; $i < 11 && $g_day_no >= $g_days_in_month[$i] + ($i == 1 && $leap); $i++) {
+        $g_day_no -= $g_days_in_month[$i] + ($i == 1 && $leap);
+    }
+    
+    $gm = $i + 1;
+    $gd = $g_day_no + 1;
+    
+    return array($gy, $gm, $gd);
 }
 
 /**
@@ -92,7 +196,7 @@ function user_has_ever_been_charged($user_id): bool
  * @param  bool $not_only_wallet_first_time
  * @return array
  */
-function process_csv_file(array $file, bool $continue_if_exists = false, bool $not_only_wallet_first_time = false): array
+function process_csv_file(array $file, bool $continue_if_exists = false, bool $not_only_wallet_first_time = false, int $expire_date = 0): array
 {
     $log_messages = [];
 
@@ -106,16 +210,18 @@ function process_csv_file(array $file, bool $continue_if_exists = false, bool $n
         fgetcsv($handle);
 
         while (($data = fgetcsv($handle)) !== false) {
-            $username         = trim($data[0] ?? '');
-            $amount           = floatval(trim($data[1] ?? ''));
-            $percent_charge   = floatval(trim($data[2] ?? ''));
-            $fixed_charge     = floatval(trim($data[3] ?? ''));
-            $first_name       = trim($data[4] ?? '');
-            $last_name        = trim($data[5] ?? '');
-            $state            = trim($data[6] ?? '');
-            $city             = trim($data[7] ?? '');
-            $charge           = ($percent_charge > 0) ? (($percent_charge / 100) * $amount) : $fixed_charge;
-
+            $username           = trim($data[0] ?? '');
+            $amount             = floatval(trim($data[1] ?? ''));
+            $percent_charge     = floatval(trim($data[2] ?? ''));
+            $fixed_charge       = floatval(trim($data[3] ?? ''));
+            $first_name         = trim($data[4] ?? '');
+            $last_name          = trim($data[5] ?? '');
+            $state              = trim($data[6] ?? '');
+            $city               = trim($data[7] ?? '');
+            $wallet_expire_date = trim($data[9] ?? $expire_date);
+            $expire_timestamp = convert_to_timestamp(20);
+            $wallet_timestamp = convert_to_timestamp('1404/04/25');
+            $charge             = ($percent_charge > 0) ? (($percent_charge / 100) * $amount) : $fixed_charge;
             if (empty($username)) {
                 $log_messages[] = "⛔ نام کاربری خالی است.";
                 continue;
@@ -150,7 +256,7 @@ function process_csv_file(array $file, bool $continue_if_exists = false, bool $n
             ]);
 
             if (user_has_ever_been_charged($user_id) && $not_only_wallet_first_time) {
-                if (add_wallet_balance($user_id, $charge)) {
+                if (add_wallet_balance($user_id, $charge, $wallet_timestamp)) {
                     $log_messages[] = "✅ شارژ کیف پول کاربر $username به مبلغ $charge انجام شد.";
                 } else {
                     $log_messages[] = "❌ خطا در شارژ کیف پول $username.";
