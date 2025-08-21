@@ -2,26 +2,26 @@
 
 class We_SMS_Manager
 {
-    protected string $panel = 'mellipayamak';
+    protected string $panel;
     protected string $username;
     protected string $password;
+    protected string $pattern;
     protected string $from;
     protected string $url_send_sms;
     protected string $url_send_pattern;
 
-    public function __construct(
-        string $username,
-        string $password,
-        string $panel = 'mellipayamak'
-    ) {
-        $this->panel = $panel;
-        $this->username = $username;
-        $this->password = $password;
+    public function __construct() {
+        $setting = new We_User_Importer_Settings();
+        $this->panel = $setting->get_setting('sms_gateway');
+        $this->username = $setting->get_setting('sms_username');
+        $this->password = $setting->get_setting('sms_password');
+        $this->pattern = $setting->get_setting('sms_pattern');
         $this->from     = '';
 
-        if ($panel === 'mellipayamak') {
-            $this->url_send_sms     = 'https://rest.payamak-panel.com/api/SendSMS/SendSMS';
-            $this->url_send_pattern = 'http://api.payamak-panel.com/post/Send.asmx/SendByBaseNumber2';
+        if ($this->panel === 'melipayamak') {
+            $this->url_send_sms      = 'https://rest.payamak-panel.com/api/SendSMS/SendSMS';
+            $this->url_send_pattern  = 'https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber';
+            $this->url_send_pattern2 = 'http://api.payamak-panel.com/post/Send.asmx/SendByBaseNumber2';
         } else {
             throw new InvalidArgumentException("Unsupported SMS panel: {$this->panel}");
         }
@@ -46,37 +46,48 @@ class We_SMS_Manager
 
         return $this->makeRequest($this->url_send_sms, $data);
     }
-
+    
     /**
      * Send SMS using pattern (base number)
      */
-    public function sendPatternSMS(string $textArgs, string $to, int $bodyId): bool|string
+    public function sendPatternSMS(string|array $textArgs, string $to, ?int $bodyId = null): bool|string
     {
-        if (empty($to) || empty($textArgs) || !$bodyId) return false;
+        if (empty($to) || empty($textArgs)) return false;
         $data = [
             'username' => $this->username,
             'password' => $this->password,
             'text'     => $textArgs,
             'to'       => $this->normalize_mobile_number($to),
-            'bodyId'   => $bodyId
+            'bodyId'   => $this->pattern ?? $bodyId,
         ];
 
-        return $this->makeRequest($this->url_send_pattern, $data);
+        return $this->makeRequest($this->url_send_pattern2, $data, 'GET');
     }
 
     /**
      * Make cURL POST request
      */
-    protected function makeRequest(string $url, array $data): bool|string
+    protected function makeRequest(string $url, array $data, string $method = 'POST'): bool|string
     {
-        $urlWithQuery = $url . '?' . http_build_query($data);
-        $handle = curl_init($urlWithQuery);
-
-        curl_setopt_array($handle, [
+        $curl_options = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_SSL_VERIFYPEER => false,
-        ]);
+        ];
+        switch ($method) {
+            case 'POST':
+                $curl_options[CURLOPT_POST] = true;
+                $curl_options[CURLOPT_POSTFIELDS] = http_build_query($data);
+                break;
+            case 'GET':
+                $url = $url . '?' . http_build_query($data);
+                break;
+            default:
+                return "Method Unsupported!";
+                break;
+        }
+        $handle = curl_init($url);
+        curl_setopt_array($handle, $curl_options);
         $response = curl_exec($handle);
 
         if (curl_errno($handle)) {

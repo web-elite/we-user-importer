@@ -130,6 +130,11 @@ class We_User_Importer
         require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-we-user-importer-sms-manager.php';
 
         /**
+         * The class responsible for managing settings
+         */
+        require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-we-user-importer-settings.php';
+
+        /**
          * The class responsible for handling user-related operations like csv import and etc.
          */
         require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-we-user-importer-handler.php';

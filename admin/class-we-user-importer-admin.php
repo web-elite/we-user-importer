@@ -129,6 +129,15 @@ class We_User_Importer_Admin
             "dashicons-upload",
             76
         );
+
+        add_submenu_page(
+            WE_USER_IMPORTER_SLUG,
+            'تنظیمات',
+            'تنظیمات',
+            "manage_options",
+            WE_USER_IMPORTER_SLUG . '-settings',
+            [$this, "admin_menu_setting_content"]
+        );
     }
 
     /**
@@ -140,6 +149,17 @@ class We_User_Importer_Admin
     {
         include_once plugin_dir_path(__FILE__) .
             "/partials/we-user-importer-admin-display.php";
+    }
+
+    /**
+     * fallback function for admin menu settings content.
+     *
+     * @since    1.0.0
+     */
+    public function admin_menu_setting_content()
+    {
+        include_once plugin_dir_path(__FILE__) .
+            "/partials/we-user-importer-admin-settings.php";
     }
 
     /**

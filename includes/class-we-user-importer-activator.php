@@ -30,5 +30,8 @@ class We_User_Importer_Activator
 	 *
 	 * @since    1.0.0
 	 */
-	public static function activate() {}
+	public static function activate() {
+		$settings = new We_User_Importer_Settings();
+		$settings->create_tables();
+	}
 }

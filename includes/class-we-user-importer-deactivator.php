@@ -20,7 +20,8 @@
  * @subpackage We_User_Importer/includes
  * @author     AlirezaYaghouti <webelitee@gmail.com>
  */
-class We_User_Importer_Deactivator {
+class We_User_Importer_Deactivator
+{
 
 	/**
 	 * Short Description. (use period)
@@ -29,8 +30,9 @@ class We_User_Importer_Deactivator {
 	 *
 	 * @since    1.0.0
 	 */
-	public static function deactivate() {
-
+	public static function deactivate()
+	{
+		$settings = new We_User_Importer_Settings();
+		$settings->drop_tables();
 	}
-
 }
