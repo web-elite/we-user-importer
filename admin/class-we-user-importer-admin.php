@@ -121,8 +121,8 @@ class We_User_Importer_Admin
     public function admin_menu()
     {
         add_menu_page(
-            WE_USER_IMPORTER_NAME,
-            WE_USER_IMPORTER_NAME,
+            'درون ریزی کاربران',
+            'درون ریزی کاربران',
             "manage_options",
             WE_USER_IMPORTER_SLUG,
             [$this, "admin_menu_content"],
