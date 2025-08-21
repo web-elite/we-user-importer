@@ -36,8 +36,10 @@ if (! defined('WPINC')) {
  */
 define('WE_USER_IMPORTER_VERSION', '1.0.0');
 define('WE_USER_IMPORTER_SLUG', 'we-user-importer');
-define('WE_USER_IMPORTER_NAME', __('User Importer', WE_USER_IMPORTER_SLUG));
 define('WE_EXAMPLE_FILE_URL', plugin_dir_url(__FILE__) . 'example.csv');
+define('WE_USER_IMPORTER_SETTINGS', 'we_user_importer_settings');
+define('WE_ENCRYPTE_KEY', hash('sha256', WE_USER_IMPORTER_SLUG));
+define('WE_ENCRYPTE_IV', random_bytes(16));
 /**
  * The code that runs during plugin activation.
  * This action is documented in includes/class-we-user-importer-activator.php
